@@ -1,0 +1,42 @@
+name: Update VS Code Server
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-vscode-server
+  cancel-in-progress: false
+
+jobs:
+  update-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download latest stable VS Code Server
+        run: curl --fail --location --retry 3 https://update.code.visualstudio.com/latest/server-linux-x64/stable --output vscode-server-linux-x64.tar.gz
+
+      - name: Create checksum
+        run: sha256sum vscode-server-linux-x64.tar.gz > vscode-server-linux-x64.tar.gz.sha256
+
+      - name: Create or update rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: vscode-server-latest
+        run: |
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Latest VS Code Server (Linux x64)" \
+              --notes "Automatically updated daily from the official VS Code stable server download." \
+              --target "$GITHUB_SHA"
+          fi
+
+          gh release upload "$RELEASE_TAG" \
+            vscode-server-linux-x64.tar.gz \
+            vscode-server-linux-x64.tar.gz.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
